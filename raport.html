@@ -114,7 +114,7 @@
                         wyswietloneWpisy.add(kluczDnia); // Blokujemy ten dzień dla tego pracownika
 
                         html += `<tr>
-                            <td style="font-weight: normal; color: #000; text-align: left">${row.nazwisko}</td>
+                            <td style="font-weight: normal; color: #000; text-align: left">${row.nazwisko.replace(/[0-9]/g, '')}</td>
                             <td>${row.data}</td>
                             <td>${row.rozpoczecie}</td>
                             <td>${row.zakonczenie}</td>
