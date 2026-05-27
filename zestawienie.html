@@ -144,11 +144,14 @@
                 }
             });
 
-            // Budowanie tabeli na 31 dni
+// Zmienna do przechowywania łącznej liczby minut z całego miesiąca
+            let calkowityCzasWMinutach = 0;
+
+            // Budowanie nagłówka tabeli
             let html = `<table>
                 <thead>
                     <tr>
-                        <th style="width: 40px;">dzień</th>
+                        <th style="width: 40px;">dzień miesiąca</th>
                         <th>rozpoczęcie</th>
                         <th>zakończenie</th>
                         <th>czas pracy</th>
@@ -156,14 +159,12 @@
                 </thead>
                 <tbody>`;
             
-for (let d = 1; d <= 31; d++) {
+            // Pętla generująca wiersze dla 31 dni
+            for (let d = 1; d <= 31; d++) {
                 if (dataMap[d]) {
-                    // Pobieramy czas pracy z bazy danych
                     const czasPracy = dataMap[d].czas ? dataMap[d].czas.trim() : "";
 
-                    // Sprawdzamy, czy czas pracy to zero (obsługuje formaty: 0:00, 00:00, 00:00:00)
                     if (czasPracy === "0:00" || czasPracy === "00:00" || czasPracy === "00:00:00") {
-                        // Jeśli czas pracy wynosi 0, traktujemy dzień jako nieprzepracowany
                         html += `<tr style="color: #888;">
                             <td style="font-weight: normal; color: #000;">${d}</td>
                             <td>---</td>
@@ -171,16 +172,24 @@ for (let d = 1; d <= 31; d++) {
                             <td>---</td>
                         </tr>`;
                     } else {
-                        // Jeśli czas jest większy niż zero, wpisujemy normalne dane
                         html += `<tr>
                             <td style="font-weight: bold; color: #000;">${d}</td>
                             <td>${dataMap[d].rozpoczecie}</td>
                             <td>${dataMap[d].zakonczenie}</td>
                             <td>${czasPracy}</td>
                         </tr>`;
+
+                        // --- LOGIKA SUMOWANIA ---
+                        // Rozbijamy czas "GG:MM" na osobne godziny i minuty
+                        const częściCzasu = czasPracy.split(':');
+                        if (częściCzasu.length >= 2) {
+                            const godziny = parseInt(częściCzasu[0], 10) || 0;
+                            const minuty = parseInt(częściCzasu[1], 10) || 0;
+                            // Zamieniamy wszystko na minuty i dodajemy do licznika
+                            calkowityCzasWMinutach += (godziny * 60) + minuty;
+                        }
                     }
                 } else {
-                    // Jeśli pracownika w ogóle nie było w arkuszu dla tego dnia
                     html += `<tr style="color: #888;">
                         <td style="font-weight: normal; color: #000;">${d}</td>
                         <td>---</td>
@@ -190,8 +199,25 @@ for (let d = 1; d <= 31; d++) {
                 }
             }
 
+            // --- KONWERSJA SUMY Z MINUT NA FORMAT GG:MM ---
+            const sumaGodzin = Math.floor(calkowityCzasWMinutach / 60);
+            const sumaMinut = calkowityCzasWMinutach % 60;
+            // Formatujemy minuty tak, aby zawsze miały dwie cyfry (np. 05 zamiast 5)
+            const sformatowaneMinuty = sumaMinut.toString().padStart(2, '0');
+            const ostatecznySumaCzasu = `${sumaGodzin}:${sformatowaneMinuty}`;
+
+            // --- DODANIE WIERSZA Z SUMĄ NA KOŃCU TABELI ---
+            html += `
+                <tr style="background-color: #fff; font-size: 16px;">
+                    <td colspan="3" style="text-align: right; font-weight: normal; padding: 6px; color: #000;">SUMA GODZIN:</td>
+                    <td style="padding: 6px; color: #000; font-size: 20px;"><strong>${ostatecznySumaCzasu}</strong></td>
+                </tr>`;
+
             html += '</tbody></table>';
+            
+            // Wstrzyknięcie gotowej tabeli wraz z sumą do dokumentu HTML
             resultsDiv.innerHTML = html;
+            loader.style.display = "none";
 
         } catch (error) {
             console.error(error);
