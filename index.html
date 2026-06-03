@@ -128,33 +128,27 @@
         }
     }
 
-function applyRoundingTolerance(dateObj, actionType) {
-    const minutes = dateObj.getMinutes();
-    
-    if (actionType === "rozpoczecie") {
-        // Tolerancja dla ROZPOCZĘCIA: --:45 <-> --:05
-        if (minutes >= 45) {
-            // Np. 06:47 -> 07:00
-            dateObj.setHours(dateObj.getHours() + 1);
-            dateObj.setMinutes(0, 0, 0);
-        } else if (minutes <= 5) {
-            // Np. 07:04 -> 07:00
-            dateObj.setMinutes(0, 0, 0);
+    function applyRoundingTolerance(dateObj, actionType) {
+        const minutes = dateObj.getMinutes();
+        
+        if (actionType === "rozpoczecie") {
+            if (minutes >= 45) {
+                dateObj.setHours(dateObj.getHours() + 1);
+                dateObj.setMinutes(0, 0, 0);
+            } else if (minutes <= 5) {
+                dateObj.setMinutes(0, 0, 0);
+            }
+        } else if (actionType === "zakonczenie") {
+            if (minutes >= 55) {
+                dateObj.setHours(dateObj.getHours() + 1);
+                dateObj.setMinutes(0, 0, 0);
+            } else if (minutes <= 15) {
+                dateObj.setMinutes(0, 0, 0);
+            }
         }
-    } else if (actionType === "zakonczenie") {
-        // Tolerancja dla ZAKOŃCZENIA: --:55 <-> --:15
-        if (minutes >= 55) {
-            // Np. 14:57 -> 15:00
-            dateObj.setHours(dateObj.getHours() + 1);
-            dateObj.setMinutes(0, 0, 0);
-        } else if (minutes <= 15) {
-            // Np. 15:12 -> 15:00
-            dateObj.setMinutes(0, 0, 0);
-        }
+        
+        return dateObj;
     }
-    
-    return dateObj;
-}
 
     function resetUI() {
         const btn = document.getElementById('saveBtn');
@@ -162,12 +156,15 @@ function applyRoundingTolerance(dateObj, actionType) {
         btn.innerText = "Zatwierdź";
         btn.classList.remove('sending');
         
-        // Odblokowanie przycisku anulowania po zresetowaniu UI
         const cancelBtn = document.getElementById('cancelSaveBtn');
         if (cancelBtn) cancelBtn.disabled = false;
+
+        // Czyszczenie tymczasowej pamięci po udanym zapisie lub anulowaniu
+        localStorage.removeItem('pending_scan_code');
+        localStorage.removeItem('pending_scan_date');
+        localStorage.removeItem('pending_scan_is_return');
     }
 
-    // --- FUNKCJA AKTUALIZACJI ETYKIETY PRZYCISKU ---
     function updateDeviceButtonLabel() {
         const savedId = localStorage.getItem('app_device_id');
         const btn = document.getElementById('deviceIdBtn');
@@ -197,11 +194,11 @@ function applyRoundingTolerance(dateObj, actionType) {
         
         if (html5QrcodeScanner) {
             html5QrcodeScanner.clear().then(() => {
-                html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 }, false);
+                html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 20, qrbox: 250 }, false);
                 html5QrcodeScanner.render(onScanSuccess);
             });
         } else {
-            html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 }, false);
+            html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 20, qrbox: 250 }, false);
             html5QrcodeScanner.render(onScanSuccess);
         }
     }
@@ -225,9 +222,13 @@ function applyRoundingTolerance(dateObj, actionType) {
             badge.className = "status-badge status-exit";
         }
 
+        // NOWOŚĆ: Zapisujemy ten stan do pamięci na wypadek błędu sieci i odświeżenia strony
+        localStorage.setItem('pending_scan_code', currentCode);
+        localStorage.setItem('pending_scan_date', currentFullDate.toISOString());
+        localStorage.setItem('pending_scan_is_return', isReturnAction ? "true" : "false");
+
         document.getElementById('result-display').innerText = currentCode;
         
-        // POPRAWKA: Konwersja daty na pełny format lokalny YYYY-MM-DDTHH:MM dla pola datetime-local
         const offset = currentFullDate.getTimezoneOffset() * 60000;
         const localISOTime = (new Date(currentFullDate.getTime() - offset)).toISOString().slice(0, 16);
         document.getElementById('time-display').value = localISOTime;
@@ -244,7 +245,6 @@ function applyRoundingTolerance(dateObj, actionType) {
         processEntry(decodedText, new Date());
     }
 
-    // --- OBSŁUGA USTAWIANIA IDENTYFIKATORA ---
     document.getElementById('deviceIdBtn').addEventListener('click', () => {
         const currentSaved = localStorage.getItem('app_device_id') || ""; 
         const inputId = prompt("Wprowadź identyfikator:", currentSaved);
@@ -255,15 +255,11 @@ function applyRoundingTolerance(dateObj, actionType) {
         updateDeviceButtonLabel();
     });
 
-    // Obsługa przycisku "Wprowadź ręcznie"
-// Obsługa przycisku "Wprowadź ręcznie"
     document.getElementById('manualBtn').addEventListener('click', () => {
         if(html5QrcodeScanner) html5QrcodeScanner.clear();
         document.getElementById('reader').classList.add('hidden');
         document.getElementById('bottom-controls').classList.add('hidden');
         document.getElementById('manual-section').classList.remove('hidden');
-        
-        // Czyścimy pole tekstowe na nazwisko przy każdym otwarciu panelu
         document.getElementById('manual-name').value = "";
     });
 
@@ -277,14 +273,10 @@ function applyRoundingTolerance(dateObj, actionType) {
             return; 
         }
         
-        // Zamiast czytać z pola, generujemy aktualną datę i godzinę "tu i teraz"
         const manualDate = new Date(); 
-        
-        // Przekazujemy dane do standardowego ekranu podsumowania (tam gdzie można to jeszcze edytować)
         processEntry(name, manualDate);
     });
 
-    // --- ANULOWANIE BŁĘDNEGO ZESKANOWANIA ---
     document.getElementById('cancelSaveBtn').addEventListener('click', () => {
         if (document.getElementById('manual-name')) {
             document.getElementById('manual-name').value = "";
@@ -294,7 +286,6 @@ function applyRoundingTolerance(dateObj, actionType) {
         startScanner();
     });
 
-    // --- GŁÓWNY LISTENER ZAPISU (Z WYSYŁANIEM ID URZĄDZENIA) ---
     document.getElementById('saveBtn').addEventListener('click', async () => {
         const btn = document.getElementById('saveBtn');
 
@@ -310,17 +301,11 @@ function applyRoundingTolerance(dateObj, actionType) {
             return;
         }
         
-        // Pobieramy wartość z pola edycji daty/czasu i nadpisujemy obiekt currentFullDate
         const editedTimestamp = document.getElementById('time-display').value;
         if (editedTimestamp) {
             currentFullDate = new Date(editedTimestamp);
-            
-            // Określamy typ akcji na podstawie zmiennej isReturnAction
             const akcja = isReturnAction ? "zakonczenie" : "rozpoczecie";
-            
-            // >>> WYWOŁUJEMY NOWĄ TOLERANCJĘ Z PARAMETREM AKCJI <<<
             currentFullDate = applyRoundingTolerance(currentFullDate, akcja);
-            
         } else {
             alert("❌ Proszę wprowadzić poprawną datę i godzinę.");
             return;
@@ -330,7 +315,6 @@ function applyRoundingTolerance(dateObj, actionType) {
         btn.innerText = "Wysyłanie...";
         btn.classList.add('sending');
         
-        // Blokada przycisku anulowania na czas wysyłania do bazy danych
         const cancelBtn = document.getElementById('cancelSaveBtn');
         if (cancelBtn) cancelBtn.disabled = true;
 
@@ -362,7 +346,7 @@ function applyRoundingTolerance(dateObj, actionType) {
                 data = JSON.parse(responseText);
             } catch (jsonError) {
                 if (responseText.includes("Urządzenie nieautoryzowane") || responseText.includes("Brak dostępu")) {
-                    alert("❌ Nieautoryzowane urządzenie!\nBrak dostępu do systemu rejestracji.");
+                    alert("❌ Nieautoryzowane urządzenie!\nBrak dostępu.");
                     resetUI();
                     return;
                 }
@@ -375,7 +359,6 @@ function applyRoundingTolerance(dateObj, actionType) {
                 return;
             }
 
-            // --- SUKCES: Autoryzacja i zapis przeszły pomyślnie ---
             if (isReturnAction) {
                 for (let i = logs.length - 1; i >= 0; i--) {
                     if (logs[i].kod === currentCode && logs[i].zakonczenieRaw === null) {
@@ -400,8 +383,6 @@ function applyRoundingTolerance(dateObj, actionType) {
             const modal = document.getElementById('successModal');
             modal.style.display = "flex";
 
-            //playSuccessSound();
-
             await new Promise((resolve) => {
                 document.getElementById('modalOkBtn').onclick = function() {
                     modal.style.display = "none";
@@ -415,11 +396,13 @@ function applyRoundingTolerance(dateObj, actionType) {
         } catch (err) {
             console.error("Szczegóły błędu:", err);
             if (err.name === "TypeError") {
-                alert("🔒 Brak autoryzacji bazy danych!\nTwoje urządzenie prawdopodobnie nie zostało jeszcze dodane do listy autoryzowanych urządzeń w arkuszu.");
+                // POPRAWKA: Informujemy o błędzie i odświeżamy. Pamięć podręczna zachowa dane!
+                alert("🌐 Krytyczny błąd połączenia!\nSkrypt Google jest nieosiągalny lub połączenie zostało przerwane.\n\nKliknij OK, aby odświeżyć stronę. Twoje skanowanie zostało zapamiętane!");
+                window.location.reload(); 
             } else {
                 alert("❌ Błąd połączenia internetowego. Spróbuj jeszcze raz.");
+                resetUI();
             }
-            resetUI();
         }
     });
 
@@ -434,5 +417,22 @@ function applyRoundingTolerance(dateObj, actionType) {
         return [h, m, s].map(v => v < 10 ? "0" + v : v).join(":");
     }
 
-    window.onload = startScanner;
+    // --- POPRAWIONA FUNKCJA INICJALIZACJI APLIKACJI ---
+    window.onload = function() {
+        updateRowCounter();
+        updateDeviceButtonLabel();
+
+        // Sprawdzamy, czy w pamięci urządzenia znajduje się "zawieszone" skanowanie sprzed odświeżenia
+        const savedPendingCode = localStorage.getItem('pending_scan_code');
+        const savedPendingDate = localStorage.getItem('pending_scan_date');
+        
+        if (savedPendingCode && savedPendingDate) {
+            // Jeśli znaleziono zawieszone dane, pomijamy aparat i od razu przywracamy widok formularza wysyłki
+            const parsedDate = new Date(savedPendingDate);
+            processEntry(savedPendingCode, parsedDate);
+        } else {
+            // Standardowy start skanera, jeśli pamięć jest czysta
+            startScanner();
+        }
+    };
 </script>
